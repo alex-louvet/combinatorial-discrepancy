@@ -2,6 +2,7 @@
 #include <cstdlib>
 #include <math.h>
 #include <ostream>
+#include <sched.h>
 #include <vector>
 
 #include "classes.cpp"
@@ -109,7 +110,22 @@ Coloring lm_partial(SetSystem ss, vector<float> constraints, Point x0) {
   auto random_int = [&d, &gen] { return d(gen); };
   Coloring res(x0);
   for (int t = 0; t < 64 * log(m) * log(m); t++) {
-    Eigen::MatrixXd A(n + m, n);
+    int cst_count = 0;
+    for (int i = 0; i < n; i++) {
+      if (res.colors.at(i) > 1 - 1 / (8 * log(m)) or
+          res.colors.at(i) < 1 / (8 * log(m)) - 1) {
+        cst_count++;
+      }
+    }
+    for (int j = 0; j < m; j++) {
+      if (dots(vec_diff(res.colors, x0.coordinates), ss.sets.at(j).points) >=
+              constraints.at(j) - 1 / (8 * log(m)) or
+          dots(vec_diff(res.colors, x0.coordinates), ss.sets.at(j).points) <=
+              1 / (8 * log(m)) - constraints.at(j)) {
+        cst_count++;
+      }
+    }
+    Eigen::MatrixXd A(max(1, cst_count), n);
     int A_counter = 0;
     for (int i = 0; i < n; i++) {
       if (res.colors.at(i) > 1 - 1 / (8 * log(m)) or
@@ -117,12 +133,8 @@ Coloring lm_partial(SetSystem ss, vector<float> constraints, Point x0) {
         for (int k = 0; k < n; k++) {
           A(A_counter, k) = (k == i) ? 1.0f : 0.0f;
         }
-      } else {
-        for (int k = 0; k < n; k++) {
-          A(A_counter, k) = 0.0f;
-        }
+        A_counter++;
       }
-      A_counter++;
     }
     for (int j = 0; j < m; j++) {
       if (dots(vec_diff(res.colors, x0.coordinates), ss.sets.at(j).points) >=
@@ -132,12 +144,8 @@ Coloring lm_partial(SetSystem ss, vector<float> constraints, Point x0) {
         for (int k = 0; k < n; k++) {
           A(A_counter, k) = (ss.sets.at(j).points.at(k)) ? 1.0f : 0.0f;
         }
-      } else {
-        for (int k = 0; k < n; k++) {
-          A(A_counter, k) = 0.0f;
-        }
+        A_counter++;
       }
-      A_counter++;
     }
     Eigen::FullPivLU<Eigen::MatrixXd> lu(A);
     Eigen::MatrixXd A_null_space = lu.kernel();
@@ -162,7 +170,22 @@ Coloring lm(SetSystem ss, vector<float> constraints) {
     color_map.push_back(i);
   }
   Point x0(vector<float>(n, 0.0));
-  while (color_map.size() > 0) {
+  float progress = 0.0;
+  while (color_map.size() > 1) {
+    int barWidth = 50;
+
+    std::cout << "[";
+    int pos = barWidth * progress;
+    for (int i = 0; i < barWidth; ++i) {
+      if (i < pos)
+        std::cout << "=";
+      else if (i == pos)
+        std::cout << ">";
+      else
+        std::cout << " ";
+    }
+    std::cout << "] " << int(progress * 100.0) << " %\r";
+    std::cout.flush();
     vector<float> cst;
     for (int j = 0; j < m; j++)
       cst.push_back(2 * sqrt(sumSet(ss.sets.at(j))));
@@ -188,6 +211,9 @@ Coloring lm(SetSystem ss, vector<float> constraints) {
     SetSystem tempp = ss.project(projection_vec);
     ss.points.assign(tempp.points.begin(), tempp.points.end());
     ss.sets.assign(tempp.sets.begin(), tempp.sets.end());
+    progress = (1 - color_map.size() /
+                        static_cast<float>(n)); // for demonstration only
   }
+  std::cout << std::endl;
   return res;
 }
