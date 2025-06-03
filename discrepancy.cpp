@@ -243,6 +243,16 @@ bool weightcomp(tuple<float, int> a, tuple<float, int> b) {
   return get<0>(a) > get<0>(b);
 }
 
+vector<float> simple_sum(vector<vector<float>> v) {
+  vector<float> res = v.at(0);
+  for (int k = 1; k < v.size(); k++) {
+    for (int i = 0; i < v.at(k).size(); i++) {
+      res.at(i) = res.at(i) + v.at(k).at(i);
+    }
+  }
+  return res;
+}
+
 Coloring lrr_partial(SetSystem ss, vector<float> constraints, Point x0) {
   assert(constraints.size() == ss.sets.size());
   int n = ss.points.size();
@@ -340,23 +350,19 @@ Coloring lrr_partial(SetSystem ss, vector<float> constraints, Point x0) {
     Eigen::FullPivLU<Eigen::MatrixXd> lu(A);
     Eigen::MatrixXd A_null_space = lu.kernel();
     vector<vector<float>> A_null_space_vec = convert_eigen(A_null_space);
-    vector<float> add = A_null_space_vec.at(0);
     if (A_null_space_vec.size() == 1) {
       bool test = true;
       for (int i = 0; i < n; i++) {
-        if (add.at(i) != 0)
+        if (A_null_space_vec.at(0).at(i) != 0) {
           test = false;
-        break;
+          break;
+        }
       }
       if (test) {
         break;
       }
     }
-    for (int k = 1; k < A_null_space_vec.size(); k++) {
-      for (int i = 0; i < n; i++) {
-        add.at(i) = add.at(i) + A_null_space_vec.at(k).at(i);
-      }
-    }
+    vector<float> add = simple_sum(A_null_space_vec);
     float factor = 1;
     for (int i = 0; i < n; i++) {
       if (abs(res.colors.at(i)) < 1 &&
