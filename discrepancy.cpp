@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <cstdlib>
@@ -179,11 +180,12 @@ Coloring lm_partial(SetSystem ss, vector<float> constraints, Point x0) {
     Eigen::MatrixXd A_null_space = lu.kernel();
     vector<vector<float>> A_null_space_vec = convert_eigen(A_null_space);
     for (int k = 0; k < A_null_space_vec.size(); k++) {
-      vector<float> add =
-          vec_scal(A_null_space_vec.at(k),
-                   random_int() / (8 * n2(A_null_space_vec.at(k)) * log(m)));
-      for (int i = 0; i < n; i++)
+      vector<float> add = vec_scal(
+          A_null_space_vec.at(k),
+          random_int() / (8 * max(1.0f, n2(A_null_space_vec.at(k))) * log(m)));
+      for (int i = 0; i < n; i++) {
         res.colors.at(i) += add.at(i);
+      }
     }
   }
   return res;
@@ -199,22 +201,7 @@ Coloring lm(SetSystem ss, vector<float> constraints) {
     color_map.push_back(i);
   }
   Point x0(vector<float>(n, 0.0));
-  float progress = 0.0;
   while (color_map.size() > 1) {
-    int barWidth = 50;
-
-    std::cout << "[";
-    int pos = barWidth * progress;
-    for (int i = 0; i < barWidth; ++i) {
-      if (i < pos)
-        std::cout << "=";
-      else if (i == pos)
-        std::cout << ">";
-      else
-        std::cout << " ";
-    }
-    std::cout << "] " << int(progress * 100.0) << " %\r";
-    std::cout.flush();
     vector<float> cst;
     for (int j = 0; j < m; j++)
       cst.push_back(2 * sqrt(sumSet(ss.sets.at(j))));
@@ -240,10 +227,15 @@ Coloring lm(SetSystem ss, vector<float> constraints) {
     SetSystem tempp = ss.project(projection_vec);
     ss.points.assign(tempp.points.begin(), tempp.points.end());
     ss.sets.assign(tempp.sets.begin(), tempp.sets.end());
-    progress = (1 - color_map.size() /
-                        static_cast<float>(n)); // for demonstration only
   }
-  std::cout << std::endl;
+  for (int i = 0; i < n; i++) {
+    if (static_cast<float>(rand()) / static_cast<float>(RAND_MAX) >
+        abs(res.colors.at(i))) {
+      res.colors.at(i) = (res.colors.at(i) > 0) ? 1 : -1;
+    } else {
+      res.colors.at(i) = (res.colors.at(i) < 0) ? -1 : 1;
+    }
+  }
   return res;
 }
 
@@ -260,8 +252,7 @@ Coloring lrr_partial(SetSystem ss, vector<float> constraints, Point x0) {
   for (int j = 0; j < m; j++)
     weights.at(j) = exp(-1 * constraints.at(j) * constraints.at(j));
   int c = 0;
-  while (c < 10) {
-    c++;
+  while (true) {
     Eigen::MatrixXd A(max(n, 10), n);
     for (int i = 0; i < n; i++) {
       for (int j = 0; j < n; j++) {
@@ -271,15 +262,17 @@ Coloring lrr_partial(SetSystem ss, vector<float> constraints, Point x0) {
     int A_counter = 0;
     // U1
     for (int i = 0; i < n; i++) {
-      if (res.colors.at(i) >= 1 or res.colors.at(i) <= -1) {
+      if (res.colors.at(i) >= 0.99 or res.colors.at(i) <= -0.99) {
+        res.colors.at(i) = (res.colors.at(i) > 0) ? 1 : -1;
         for (int k = 0; k < n; k++) {
           A(A_counter, k) = (k == i) ? 1.0f : 0.0f;
         }
         A_counter++;
       }
     }
-    if (A_counter >= n / 2)
+    if (A_counter >= n / 2) {
       break;
+    }
     // U2
     for (int k = 0; k < n; k++) {
       A(A_counter, k) = res.colors.at(k);
@@ -300,7 +293,7 @@ Coloring lrr_partial(SetSystem ss, vector<float> constraints, Point x0) {
     }
     // U4
     for (int j = 0; j < m; j++) {
-      if (constraints.at(j) <= 1) {
+      if (constraints.at(j) <= 1 and constraints.at(j) > 0) {
         for (int k = 0; k < n; k++) {
           A(A_counter, k) = (ss.sets.at(j).points.at(k)) ? 1.0f : 0.0f;
         }
@@ -320,11 +313,45 @@ Coloring lrr_partial(SetSystem ss, vector<float> constraints, Point x0) {
     }
     for (int k = 0; k < n; k++)
       A(A_counter, k) = toadd.at(k);
-    // U6 TODO:
+    A_counter++;
+    // U6
+    Eigen::VectorXd b(n);
+    for (int i = 0; i < n; i++)
+      b(i) = ss.sets.at(0).points.at(i);
+    Eigen::MatrixXd mat =
+        (weights.at(0) * constraints.at(0) * constraints.at(0)) *
+        (b * b.transpose());
+    for (int j = 1; j < m; j++) {
+      for (int i = 0; i < n; i++)
+        b(i) = ss.sets.at(j).points.at(i);
+      mat += (weights.at(j) * constraints.at(j) * constraints.at(j)) *
+             (b * b.transpose());
+    }
+    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eigensolver(mat);
+    if (eigensolver.info() != Eigen::Success) {
+      abort();
+    }
+    for (int k = n - n / 16 - 1; k < n; k++) {
+      for (int i = 0; i < n; i++) {
+        A(A_counter, i) = eigensolver.eigenvectors()(i, k);
+      }
+      A_counter++;
+    }
     Eigen::FullPivLU<Eigen::MatrixXd> lu(A);
     Eigen::MatrixXd A_null_space = lu.kernel();
     vector<vector<float>> A_null_space_vec = convert_eigen(A_null_space);
     vector<float> add = A_null_space_vec.at(0);
+    if (A_null_space_vec.size() == 1) {
+      bool test = true;
+      for (int i = 0; i < n; i++) {
+        if (add.at(i) != 0)
+          test = false;
+        break;
+      }
+      if (test) {
+        break;
+      }
+    }
     for (int k = 1; k < A_null_space_vec.size(); k++) {
       for (int i = 0; i < n; i++) {
         add.at(i) = add.at(i) + A_null_space_vec.at(k).at(i);
@@ -332,7 +359,8 @@ Coloring lrr_partial(SetSystem ss, vector<float> constraints, Point x0) {
     }
     float factor = 1;
     for (int i = 0; i < n; i++) {
-      if (1 / abs(add.at(i)) - res.colors.at(i) / add.at(i) < factor) {
+      if (abs(res.colors.at(i)) < 1 &&
+          1 / abs(add.at(i)) - res.colors.at(i) / add.at(i) < factor) {
         factor = 1 / abs(add.at(i)) - res.colors.at(i) / add.at(i);
       }
     }
@@ -361,22 +389,7 @@ Coloring lrr(SetSystem ss, vector<float> constraints) {
     color_map.push_back(i);
   }
   Point x0(vector<float>(n, 0.0));
-  float progress = 0.0;
-  while (color_map.size() > 1) {
-    int barWidth = 50;
-
-    std::cout << "[";
-    int pos = barWidth * progress;
-    for (int i = 0; i < barWidth; ++i) {
-      if (i < pos)
-        std::cout << "=";
-      else if (i == pos)
-        std::cout << ">";
-      else
-        std::cout << " ";
-    }
-    std::cout << "] " << int(progress * 100.0) << " %\r";
-    std::cout.flush();
+  while (color_map.size() > 2) {
     vector<float> cst;
     for (int j = 0; j < m; j++)
       cst.push_back(2 * sqrt(sumSet(ss.sets.at(j))));
@@ -397,14 +410,29 @@ Coloring lrr(SetSystem ss, vector<float> constraints) {
         projection_vec.push_back(true);
       }
     }
+    if (color_map.size() == next_color_map.size()) {
+      cout << "LRR exited at " << color_map.size() << " (might exit below 16)"
+           << endl;
+      for (int i = 0; i < temp.colors.size(); i++) {
+        if (!colored.at(color_map.at(i))) {
+          res.colors.at(color_map.at(i)) = (temp.colors.at(i) < 0) ? -1 : 1;
+        }
+      }
+      break;
+    }
     color_map.assign(next_color_map.begin(), next_color_map.end());
     x0 = Point(next_x0);
     SetSystem tempp = ss.project(projection_vec);
     ss.points.assign(tempp.points.begin(), tempp.points.end());
     ss.sets.assign(tempp.sets.begin(), tempp.sets.end());
-    progress = (1 - color_map.size() /
-                        static_cast<float>(n)); // for demonstration only
   }
-  std::cout << std::endl;
+  for (int i = 0; i < n; i++) {
+    if (static_cast<float>(rand()) / static_cast<float>(RAND_MAX) >
+        abs(res.colors.at(i))) {
+      res.colors.at(i) = (res.colors.at(i) > 0) ? 1 : -1;
+    } else {
+      res.colors.at(i) = (res.colors.at(i) < 0) ? -1 : 1;
+    }
+  }
   return res;
 }
