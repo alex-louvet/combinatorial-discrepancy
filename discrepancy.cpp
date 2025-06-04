@@ -131,6 +131,7 @@ vector<vector<float>> convert_eigen(Eigen::MatrixXd M) {
 }
 
 Coloring lm_partial(SetSystem ss, vector<float> constraints, Point x0) {
+  assert(ss.sets.size() == constraints.size());
   int n = ss.points.size();
   int m = ss.sets.size();
   std::random_device rd{};
@@ -222,6 +223,9 @@ Coloring lm(SetSystem ss, vector<float> constraints) {
         projection_vec.push_back(true);
       }
     }
+    if (color_map.size() == next_color_map.size()) {
+      break;
+    }
     color_map.assign(next_color_map.begin(), next_color_map.end());
     x0 = Point(next_x0);
     SetSystem tempp = ss.project(projection_vec);
@@ -253,7 +257,23 @@ vector<float> simple_sum(vector<vector<float>> v) {
   return res;
 }
 
-Coloring lrr_partial(SetSystem ss, vector<float> constraints, Point x0) {
+vector<float> random_sum(vector<vector<float>> v) {
+  std::random_device rd{};
+  std::mt19937 gen{rd()};
+  std::normal_distribution d{0.0, 1.0};
+  auto random_int = [&d, &gen] { return d(gen); };
+  vector<float> res = v.at(0);
+  for (int k = 1; k < v.size(); k++) {
+    float coeff = random_int();
+    for (int i = 0; i < v.at(k).size(); i++) {
+      res.at(i) = res.at(i) + v.at(k).at(i);
+    }
+  }
+  return res;
+}
+
+Coloring lrr_partial(SetSystem ss, vector<float> constraints, Point x0,
+                     vector<float> (*incrf)(vector<vector<float>>)) {
   assert(constraints.size() == ss.sets.size());
   int n = ss.points.size();
   int m = ss.sets.size();
@@ -362,7 +382,7 @@ Coloring lrr_partial(SetSystem ss, vector<float> constraints, Point x0) {
         break;
       }
     }
-    vector<float> add = simple_sum(A_null_space_vec);
+    vector<float> add = incrf(A_null_space_vec);
     float factor = 1;
     for (int i = 0; i < n; i++) {
       if (abs(res.colors.at(i)) < 1 &&
@@ -385,7 +405,8 @@ Coloring lrr_partial(SetSystem ss, vector<float> constraints, Point x0) {
   return res;
 }
 
-Coloring lrr(SetSystem ss, vector<float> constraints) {
+Coloring lrr(SetSystem ss, vector<float> constraints,
+             vector<float> (*incrf)(vector<vector<float>>)) {
   int n = ss.points.size();
   int m = ss.sets.size();
   Coloring res(n);
@@ -399,7 +420,7 @@ Coloring lrr(SetSystem ss, vector<float> constraints) {
     vector<float> cst;
     for (int j = 0; j < m; j++)
       cst.push_back(2 * sqrt(sumSet(ss.sets.at(j))));
-    Coloring temp = lrr_partial(ss, cst, x0);
+    Coloring temp = lrr_partial(ss, cst, x0, incrf);
     vector<int> next_color_map;
     vector<float> next_x0;
     vector<bool> projection_vec;
