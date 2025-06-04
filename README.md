@@ -5,7 +5,7 @@ Experimental implementation of the Lovett-Meka combinatorial discrepancy algorit
 ## Lovett-Meka Algorithm
 
 ```c++
-lm(SetSystem ss, vector<float> cst);
+Coloring lm(SetSystem ss, vector<float> cst);
 ```
 
 This function defined in [discrepancy.cpp](./discrepancy.cpp) executes the Lovett-Meka algorithm on the set system `ss` with constraints `cst` (`cst` and `ss.sets` must have the same size).
