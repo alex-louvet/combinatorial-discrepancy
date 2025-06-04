@@ -106,3 +106,17 @@ The objects used are defined in [classes.cpp](./classes.cpp)
 `SetSystem ConcentricCircles(int n, int m)` generates 4 concentric circles of radius 0.6, 0.7, 0.8 and 0.9 centered on the origin and containing each 1/4th of the `n` elements of $X$ . Then the sets are determined by disks centered at a random elements of $X$ and with a radius determined by drawing another element of $X$. 
 
 The implementation is experimental and not documented at this stage. Feel free to reach out for explanations.
+
+### `class Coloring`
+
+#### Attributes
+
+`vector<float> colors` the list of colors of a coloring. The vector is made of `float` to represent partial colorings.
+
+#### Constructor
+
+`Coloring(Point p)` create a coloring from a point `p`
+
+`Coloring(int n)` create a coloring with `n` colors initialized at 0
+
+`Coloring()` create an empty coloring
